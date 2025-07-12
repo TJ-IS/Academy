@@ -16,3 +16,5 @@ export/
 .DS_Store
 test.txt
 test.pkl
+
+temp/

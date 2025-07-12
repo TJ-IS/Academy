@@ -15,7 +15,7 @@ def main(args):
 
 
 def dev(args):
-    embeddings = OpenAIEmbeddings(model='text-embedding-3-small')
+    embeddings = OpenAIEmbeddings(model='BAAI/bge-m3')
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
