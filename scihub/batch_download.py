@@ -32,8 +32,8 @@ def main(scopus_file_path, export_dir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--scopus_file_path', type=str, default='/Volumes/YMTC-512G/Projects/Academy/data/scopus/ais_2010_2015.csv', help='The path to the scopus csv file')
-    parser.add_argument('--export_dir', type=str, default='/Volumes/YMTC-512G/Projects/Academy/export/ais_2010_2015/', help='The path to the export directory')
+    parser.add_argument('--scopus_file_path', type=str, default='./data/scopus/ais_2010_2015.csv', help='The path to the scopus csv file')
+    parser.add_argument('--export_dir', type=str, default='./export/ais_2010_2015/', help='The path to the export directory')
     args = parser.parse_args()
 
     if not os.path.exists(args.scopus_file_path):
