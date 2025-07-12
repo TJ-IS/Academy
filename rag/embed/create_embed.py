@@ -4,7 +4,6 @@ _ = load_dotenv(find_dotenv())
 import asyncio
 import argparse
 import os
-import pickle
 import random
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
@@ -17,8 +16,11 @@ from rag.embed.md_loader import get_paper_docs
 
 
 async def handle_one_paper(paper_id, vectorstore, semaphore):
-    paper_docs = get_paper_docs(paper_id, args)
-    vectorstore.add_documents(paper_docs)
+    with semaphore:
+        paper_docs = get_paper_docs(paper_id, args)
+        vectorstore.add_documents(paper_docs)
+        
+        # TODO: 检测是否成功添加到 vectorstore
 
 
 async def main(args):
@@ -31,13 +33,11 @@ async def main(args):
 
     # 获取所有论文文档文件
     paper_ids = [str(i) for i in os.listdir(args.papers_mineru_dir)]
-    
-    semaphore = asyncio.Semaphore(10)
-    tasks = [handle_one_paper(paper_id, vectorstore, semaphore) for paper_id in paper_ids]
-
 
     # TODO: 使用一个指数分布分配每个 task 的 delay_time
-
+    # TODO: 使用 tqdm 实时更新任务进度
+    semaphore = asyncio.Semaphore(10)
+    tasks = [handle_one_paper(paper_id, vectorstore, semaphore) for paper_id in paper_ids]
 
 
 async def dev(args):
