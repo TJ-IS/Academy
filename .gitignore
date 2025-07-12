@@ -12,3 +12,5 @@ wheels/
 embeddings/
 output.log
 export/
+
+.DS_Store
