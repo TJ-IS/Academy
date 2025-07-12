@@ -14,6 +14,7 @@ dependencies = [
     "langchain-community>=0.3.27",
     "langchain-openai>=0.3.27",
     "langchain-pymupdf4llm>=0.4.1",
+    "langchain-text-splitters>=0.3.8",
     "lxml>=6.0.0",
     "mineru[core]>=2.1.0",
     "openpyxl>=3.1.5",
