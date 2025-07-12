@@ -37,10 +37,10 @@ async def handle_one_paper(paper_doc, vectorstore, args):
         pkl_file_path = os.path.join(args.papers_docs_dir, paper_doc)
         try:
             os.remove(pkl_file_path)
-            print(f'[INFO] Deleted {paper_doc}')
+            # print(f'[INFO] Deleted {paper_doc}')
         except Exception as e:
-            print(f'[WARNING] Failed to delete {paper_doc}: {e}')
-
+            # print(f'[WARNING] Failed to delete {paper_doc}: {e}')
+            pass
         return f'Paper {paper_id} (已添加)'
     except Exception as e:
         print(f'[ERROR] Failed to process paper {paper_doc}: {e}')
@@ -58,8 +58,8 @@ async def main(args):
     # 获取所有论文文档文件
     paper_docs = os.listdir(args.papers_docs_dir)
     
-    # 使用信号量限制并发数为5
-    semaphore = asyncio.Semaphore(5)
+    # 使用信号量限制并发数
+    semaphore = asyncio.Semaphore(10)
     
     async def process_with_semaphore(paper_doc):
         async with semaphore:
