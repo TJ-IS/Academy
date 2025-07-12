@@ -1,0 +1,26 @@
+[project]
+name = "chat"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "bs4>=0.0.2",
+    "chromadb>=1.0.15",
+    "faiss-cpu>=1.11.0",
+    "grobid-client-python>=0.0.11",
+    "json-repair>=0.47.6",
+    "langchain>=0.3.26",
+    "langchain-chroma>=0.2.4",
+    "langchain-community>=0.3.27",
+    "langchain-openai>=0.3.27",
+    "langchain-pymupdf4llm>=0.4.1",
+    "lxml>=6.0.0",
+    "mineru[core]>=2.1.0",
+    "openpyxl>=3.1.5",
+    "pandas>=2.3.0",
+    "pypdf>=5.7.0",
+    "python-dotenv>=1.1.1",
+    "streamlit>=1.46.1",
+    "tqdm>=4.66.0",
+]
