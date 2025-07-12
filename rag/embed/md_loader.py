@@ -39,10 +39,10 @@ def transform_md_to_docs(md_header_splits, paper_dir, args) -> List[Document]:
             id = str(uuid.uuid4()),
             page_content = doc.page_content,
             metadata = {
-                'paper_id': int(paper_id),
+                'paper_id': str(paper_id),  # 改为字符串类型以兼容Chroma filter
                 'paper_title': paper_title,
                 'paper_journal': paper_journal,
-                'paper_year': paper_year,
+                'paper_year': str(paper_year),  # 改为字符串类型
                 'section': doc.metadata['section'] if 'section' in doc.metadata else '',
             }
         ))
