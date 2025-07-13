@@ -17,181 +17,141 @@ from rag.embed.md_loader import get_paper_docs
 
 
 async def handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time=0):
-    """处理单个论文的embedding任务"""
+    """Process the embedding task of a single paper"""
     async with semaphore:
+        if await is_paper_exists(paper_id, vectorstore):
+            return {"paper_id": paper_id, "status": "skipped", "reason": "already_exists", "count": 0}
+
         try:
-            # 添加指数分布的延迟时间
-            if delay_time > 0:
-                await asyncio.sleep(delay_time)
+            await asyncio.sleep(delay_time)
             
-            # 获取论文文档
+            # Get paper documents
             paper_docs = get_paper_docs(paper_id, args)
             
             if not paper_docs:
                 return {"paper_id": paper_id, "status": "skipped", "reason": "no_docs", "count": 0}
             
-            # 检查是否需要跳过已存在的文档
-            if args.skip_existing:
-                existing_docs = vectorstore.similarity_search(
-                    query=f"paper_id:{paper_id}", 
-                    k=5, 
-                    filter={"paper_id": str(paper_id)}
-                )
-                if existing_docs:
-                    return {"paper_id": paper_id, "status": "skipped", "reason": "already_exists", "count": len(existing_docs)}
-            
-            # 添加文档到vectorstore
+            # Add documents to vectorstore
             vectorstore.add_documents(paper_docs)
             
-            # 检测是否成功添加到 vectorstore
-            verification_docs = vectorstore.similarity_search(
-                query=f"paper_id:{paper_id}", 
-                k=5, 
-                filter={"paper_id": str(paper_id)}
-            )
-            
-            if verification_docs:
+            if await is_paper_exists(paper_id, vectorstore):
                 return {"paper_id": paper_id, "status": "success", "reason": "added", "count": len(paper_docs)}
             else:
                 return {"paper_id": paper_id, "status": "failed", "reason": "verification_failed", "count": 0}
                 
         except Exception as e:
-            print(f"Error processing paper {paper_id}: {e}")
+            print(f"[ERROR] Error processing paper {paper_id}: {e}")
             return {"paper_id": paper_id, "status": "error", "reason": str(e), "count": 0}
 
 
 async def process_batch(batch_papers, vectorstore, semaphore, args, batch_num):
-    """处理一个批次的论文"""
+    """Process a batch of papers"""
     batch_size = len(batch_papers)
-    # 为当前批次生成指数分布的延迟时间
+    # Generate exponential distribution delay times for the current batch
     delay_times = np.random.exponential(scale=10.0, size=batch_size)
     
-    print(f"开始处理第 {batch_num} 批次，包含 {batch_size} 个论文")
+    print(f"[INFO] Starting to process batch {batch_num}, containing {batch_size} papers")
     
-    # 创建当前批次的任务列表
+    # Create tasks for the current batch
     tasks = [
         handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time) 
         for paper_id, delay_time in zip(batch_papers, delay_times)
     ]
     
-    # 处理当前批次的所有任务
+    # Process all tasks in the current batch
     batch_results = []
-    for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc=f"批次 {batch_num}"):
+    for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc=f"Batch {batch_num}"):
         result = await task
         batch_results.append(result)
     
     return batch_results
 
 
+async def is_paper_exists(paper_id, vectorstore):
+    """Check if the paper already exists in the vectorstore"""
+    docs = vectorstore.similarity_search(query=f"hello_world", k=1, filter={"paper_id": paper_id})
+    return len(docs) > 0
+
+
 async def main(args):
-    """主函数：使用批处理形式处理所有论文的embedding任务"""
-    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'])
+    """Main function to process all papers' embedding tasks in batch"""
+    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'], dimensions=1024)
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
-        collection_name='academy',
+        collection_name='ais_basket',
     )
 
-    # 获取所有论文文档文件
+    # Get all paper ids
     paper_ids = [str(i) for i in os.listdir(args.papers_mineru_dir) if os.path.isdir(os.path.join(args.papers_mineru_dir, i))]
-    
-    print(f"找到 {len(paper_ids)} 个论文文件夹")
+    print(f"[INFO] Found {len(paper_ids)} paper folders")
 
-    # 将论文分批处理
+    # Split papers into batches
     batch_size = args.batch_size
-    batches = [paper_ids[i:i + batch_size] for i in range(0, len(paper_ids), batch_size)]
+    batches = []
+    for batch_idx in range(0, len(paper_ids), batch_size):
+        batch_paper_ids = paper_ids[batch_idx:min(batch_idx + batch_size, len(paper_ids))]
+        batches.append(batch_paper_ids)
     
-    print(f"将论文分为 {len(batches)} 个批次，每批次最多 {batch_size} 个论文")
+    print(f"[INFO] Split {len(paper_ids)} papers into {len(batches)} batches, each batch contains at most {batch_size} papers")
     
-    # 创建信号量控制并发数
-    semaphore = asyncio.Semaphore(5)
+    # Create semaphore to control concurrency
+    semaphore = asyncio.Semaphore(10)
     
-    # 处理所有批次
+    # Process all batches
     all_results = []
     for batch_num, batch_papers in enumerate(batches, 1):
         batch_results = await process_batch(batch_papers, vectorstore, semaphore, args, batch_num)
         all_results.extend(batch_results)
         
-        # 批次间的间隔
+        # Interval between batches
         if batch_num < len(batches):
-            print(f"批次 {batch_num} 完成，等待 {args.batch_interval} 秒后处理下一批次...")
+            print(f"[INFO] Batch {batch_num} completed, waiting {args.batch_interval} seconds before processing next batch...")
             await asyncio.sleep(args.batch_interval)
     
-    # 统计结果
+    # Statistics
     success_count = sum(1 for r in all_results if r["status"] == "success")
     failed_count = sum(1 for r in all_results if r["status"] == "failed")
     error_count = sum(1 for r in all_results if r["status"] == "error")
     skipped_count = sum(1 for r in all_results if r["status"] == "skipped")
     total_docs = sum(r["count"] for r in all_results if r["status"] == "success")
     
-    print(f"\n任务完成统计:")
-    print(f"成功: {success_count}")
-    print(f"失败: {failed_count}")
-    print(f"错误: {error_count}")
-    print(f"跳过: {skipped_count}")
-    print(f"总计处理文档数: {total_docs}")
+    print(f"[INFO] Task completion statistics:")
+    print(f"[INFO] Success: {success_count}")
+    print(f"[INFO] Failed: {failed_count}")
+    print(f"[INFO] Error: {error_count}")
+    print(f"[INFO] Skipped: {skipped_count}")
+    print(f"[INFO] Total processed documents: {total_docs}")
     
-    # 输出错误详情
+    # Output error details
     if error_count > 0:
-        print(f"\n错误详情:")
+        print(f"[ERROR] Error details:")
         for result in all_results:
             if result["status"] == "error":
-                print(f"  论文 {result['paper_id']}: {result['reason']}")
+                print(f"  Paper {result['paper_id']}: {result['reason']}")
 
 
 async def dev(args):
-    """开发模式：测试单个论文的处理"""
-    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'])
+    """Development mode: test the processing of a single paper"""
+    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'], dimensions=1024)
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
         collection_name='test',
     )
 
-    paper_id = "1"  # 使用字符串格式保持一致
+    paper_id = "1"  # Use string format to keep consistent
 
-    paper_docs = get_paper_docs(paper_id, args)
-    print(f"获取到 {len(paper_docs)} 个文档段落")
-    
-    if paper_docs:
-        print("文档示例:")
-        for i, doc in enumerate(paper_docs[:2]):  # 只显示前两个
-            print(f"  文档 {i+1}:")
-            print(f"    内容长度: {len(doc.page_content)}")
-            print(f"    元数据: {doc.metadata}")
-            print(f"    内容预览: {doc.page_content[:100]}...")
-            print()
-
-        vectorstore.add_documents(paper_docs)
-        print("文档已添加到vectorstore")
-        
-        # 验证添加是否成功 - 使用str类型的paper_id进行过滤
-        print(f"正在验证paper_id={paper_id}的文档...")
-        verification_docs = vectorstore.similarity_search(
-            query=f"paper_id:{paper_id}", 
-            k=5, 
-            filter={"paper_id": str(paper_id)}  # 使用str类型，因为metadata中存储的是str
-        )
-        print(f"验证结果: 找到 {len(verification_docs)} 个相关文档")
-        
-        if verification_docs:
-            print("找到的文档metadata:")
-            for i, doc in enumerate(verification_docs):
-                print(f"  文档 {i+1}: {doc.metadata}")
-        else:
-            # 如果没找到，尝试不使用filter进行搜索
-            print("没有找到匹配的文档，尝试不使用filter搜索...")
-            all_docs = vectorstore.similarity_search(
-                query=f"paper_id:{paper_id}", 
-                k=5
-            )
-            print(f"不使用filter找到 {len(all_docs)} 个文档")
-            if all_docs:
-                print("所有文档的metadata:")
-                for i, doc in enumerate(all_docs):
-                    print(f"  文档 {i+1}: {doc.metadata}")
+    if await is_paper_exists(paper_id, vectorstore):
+        print(f"[INFO] Paper {paper_id} already exists")
     else:
-        print("没有获取到任何文档")
+        paper_docs = get_paper_docs(paper_id, args)
+        print(f"[INFO] Adding paper {paper_id}")
+        vectorstore.add_documents(paper_docs)
+        if await is_paper_exists(paper_id, vectorstore):
+            print(f"[INFO] Paper {paper_id} added")
+        else:
+            print(f"[ERROR] Paper {paper_id} failed to add")
 
 
 if __name__ == '__main__':
@@ -199,9 +159,8 @@ if __name__ == '__main__':
     args.add_argument('--papers_mineru_dir', type=str, default='./export/papers_mineru', help='The path to the papers mineru directory')
     args.add_argument('--chroma_dir', type=str, default='./export/chroma', help='The path to the chroma directory')
     args.add_argument('--db_path', type=str, default='./export/db/academy.db', help='The path to the database file')
-    args.add_argument('--skip_existing', action='store_true', help='Skip papers that already exist in the vectorstore')
     args.add_argument('--dev', action='store_true', help='Use dev mode')
-    args.add_argument('--batch_size', type=int, default=30, help='Number of papers to process in each batch')
+    args.add_argument('--batch_size', type=int, default=100, help='Number of papers to process in each batch')
     args.add_argument('--batch_interval', type=float, default=10.0, help='Interval (in seconds) between batches')
     args = args.parse_args()
     

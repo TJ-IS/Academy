@@ -9,26 +9,38 @@ from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 
-def get_docs_by_query(query, vectorstore, k=100):
+def get_docs_by_query(query, vectorstore, k=10):
     docs = vectorstore.similarity_search(query, k=k)
     return docs
 
 
 def main(args):
-    pass
-    
-
-
-def dev(args):
-    embeddings = OpenAIEmbeddings(model='BAAI/bge-m3')
+    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'], dimensions=1024)
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
-        collection_name='academy',
+        collection_name='ais_basket',
+    )
+    
+    query = 'explain the dual-system theory'
+    docs = vectorstore.similarity_search(query=query, k=5)
+    for doc in docs:
+        print(doc.metadata)
+        print(doc.page_content)
+        print('-' * 100)
+
+
+def dev(args):
+    embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'], dimensions=1024)
+    vectorstore = Chroma(
+        embedding_function=embeddings,
+        persist_directory=args.chroma_dir,
+        collection_name='test',
     )
 
-    query = 'what is loss aversion?'
-    docs = get_docs_by_query(query, vectorstore)
+    query = 'dual-system theory'
+    # docs = get_docs_by_query(query, vectorstore)
+    docs = vectorstore.similarity_search(query='hello_world', k=1, filter={"paper_id": "1"})
 
     for doc in docs:
         print(doc.metadata)
@@ -40,7 +52,11 @@ def dev(args):
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
     args.add_argument('--chroma_dir', type=str, default='./export/chroma', help='The path to the chroma directory')
+    args.add_argument('--dev', action='store_true', help='Use dev mode')
     args = args.parse_args()
     
     os.makedirs(args.chroma_dir, exist_ok=True)
-    dev(args)
+    if args.dev:
+        dev(args)
+    else:
+        main(args)

@@ -122,7 +122,7 @@ async def process_paper_by_id(paper_id, args, semaphore, delay_seconds):
                 paper_info = json.loads(paper_info)
         except Exception as e:
             print(f"[ERROR] Failed to parse the paper info for paper {paper_id}: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(3)
             return None
 
         if paper_info:
