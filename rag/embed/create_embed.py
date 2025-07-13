@@ -60,8 +60,31 @@ async def handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time=0)
             return {"paper_id": paper_id, "status": "error", "reason": str(e), "count": 0}
 
 
+async def process_batch(batch_papers, vectorstore, semaphore, args, batch_num):
+    """处理一个批次的论文"""
+    batch_size = len(batch_papers)
+    # 为当前批次生成指数分布的延迟时间
+    delay_times = np.random.exponential(scale=10.0, size=batch_size)
+    
+    print(f"开始处理第 {batch_num} 批次，包含 {batch_size} 个论文")
+    
+    # 创建当前批次的任务列表
+    tasks = [
+        handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time) 
+        for paper_id, delay_time in zip(batch_papers, delay_times)
+    ]
+    
+    # 处理当前批次的所有任务
+    batch_results = []
+    for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc=f"批次 {batch_num}"):
+        result = await task
+        batch_results.append(result)
+    
+    return batch_results
+
+
 async def main(args):
-    """主函数：处理所有论文的embedding任务"""
+    """主函数：使用批处理形式处理所有论文的embedding任务"""
     embeddings = OpenAIEmbeddings(model=os.environ['EMBEDDING_MODEL'])
     vectorstore = Chroma(
         embedding_function=embeddings,
@@ -74,32 +97,32 @@ async def main(args):
     
     print(f"找到 {len(paper_ids)} 个论文文件夹")
 
-    # 使用指数分布分配每个 task 的 delay_time
-    delay_times = np.random.exponential(scale=1.0, size=len(paper_ids))
+    # 将论文分批处理
+    batch_size = args.batch_size
+    batches = [paper_ids[i:i + batch_size] for i in range(0, len(paper_ids), batch_size)]
+    
+    print(f"将论文分为 {len(batches)} 个批次，每批次最多 {batch_size} 个论文")
     
     # 创建信号量控制并发数
-    semaphore = asyncio.Semaphore(10)
+    semaphore = asyncio.Semaphore(5)
     
-    # 创建任务列表
-    tasks = [
-        handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time) 
-        for paper_id, delay_time in zip(paper_ids, delay_times)
-    ]
-    
-    # 使用 tqdm 实时更新任务进度
-    print("开始处理论文embedding任务...")
-    results = []
-    
-    for task in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="处理论文"):
-        result = await task
-        results.append(result)
+    # 处理所有批次
+    all_results = []
+    for batch_num, batch_papers in enumerate(batches, 1):
+        batch_results = await process_batch(batch_papers, vectorstore, semaphore, args, batch_num)
+        all_results.extend(batch_results)
+        
+        # 批次间的间隔
+        if batch_num < len(batches):
+            print(f"批次 {batch_num} 完成，等待 {args.batch_interval} 秒后处理下一批次...")
+            await asyncio.sleep(args.batch_interval)
     
     # 统计结果
-    success_count = sum(1 for r in results if r["status"] == "success")
-    failed_count = sum(1 for r in results if r["status"] == "failed")
-    error_count = sum(1 for r in results if r["status"] == "error")
-    skipped_count = sum(1 for r in results if r["status"] == "skipped")
-    total_docs = sum(r["count"] for r in results if r["status"] == "success")
+    success_count = sum(1 for r in all_results if r["status"] == "success")
+    failed_count = sum(1 for r in all_results if r["status"] == "failed")
+    error_count = sum(1 for r in all_results if r["status"] == "error")
+    skipped_count = sum(1 for r in all_results if r["status"] == "skipped")
+    total_docs = sum(r["count"] for r in all_results if r["status"] == "success")
     
     print(f"\n任务完成统计:")
     print(f"成功: {success_count}")
@@ -111,7 +134,7 @@ async def main(args):
     # 输出错误详情
     if error_count > 0:
         print(f"\n错误详情:")
-        for result in results:
+        for result in all_results:
             if result["status"] == "error":
                 print(f"  论文 {result['paper_id']}: {result['reason']}")
 
@@ -178,6 +201,8 @@ if __name__ == '__main__':
     args.add_argument('--db_path', type=str, default='./export/db/academy.db', help='The path to the database file')
     args.add_argument('--skip_existing', action='store_true', help='Skip papers that already exist in the vectorstore')
     args.add_argument('--dev', action='store_true', help='Use dev mode')
+    args.add_argument('--batch_size', type=int, default=30, help='Number of papers to process in each batch')
+    args.add_argument('--batch_interval', type=float, default=10.0, help='Interval (in seconds) between batches')
     args = args.parse_args()
     
     if not os.path.exists(args.papers_mineru_dir):

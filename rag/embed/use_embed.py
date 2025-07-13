@@ -19,10 +19,10 @@ def dev(args):
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
-        collection_name='test',
+        collection_name='academy',
     )
 
-    query = 'Find introduction of the paper'
+    query = 'What is the loss aversion?'
     docs = vectorstore.similarity_search(query, k=3)
     print(docs)
 
