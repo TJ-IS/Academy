@@ -22,11 +22,12 @@ def main(args):
         collection_name='ais_basket',
     )
     
-    query = 'explain the dual-system theory'
-    docs = vectorstore.similarity_search(query=query, k=5)
-    for doc in docs:
-        print(doc.metadata)
-        print(doc.page_content)
+    query = 'The community building goal is achieved through the creative combinations of membership'
+    results = vectorstore.similarity_search_with_score(query=query, k=3)
+    for res, score in results:
+        print(f"* {res.page_content}")
+        print(f"[{res.metadata}]")
+        print(f"Score: {score}")
         print('-' * 100)
 
 
@@ -40,7 +41,7 @@ def dev(args):
 
     query = 'dual-system theory'
     # docs = get_docs_by_query(query, vectorstore)
-    docs = vectorstore.similarity_search(query='hello_world', k=1, filter={"paper_id": "1"})
+    docs = vectorstore.similarity_search(query='hello_world', k=5, filter={"section": "Introduction"})
 
     for doc in docs:
         print(doc.metadata)

@@ -13,7 +13,7 @@ from tqdm.asyncio import tqdm
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 print(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from rag.embed.md_loader import get_paper_docs
+from rag.embed.md_loader import get_paper_docs, get_paper_docs_recursive
 
 
 async def handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time=0):
@@ -26,13 +26,17 @@ async def handle_one_paper(paper_id, vectorstore, semaphore, args, delay_time=0)
             await asyncio.sleep(delay_time)
             
             # Get paper documents
-            paper_docs = get_paper_docs(paper_id, args)
+            if args.recursive:
+                paper_docs = get_paper_docs_recursive(paper_id, args)
+            else:
+                paper_docs = get_paper_docs(paper_id, args)
             
             if not paper_docs:
                 return {"paper_id": paper_id, "status": "skipped", "reason": "no_docs", "count": 0}
             
             # Add documents to vectorstore
-            vectorstore.add_documents(paper_docs)
+            for i in range(0, len(paper_docs), 64):
+                vectorstore.add_documents(paper_docs[i:min(i + 64, len(paper_docs))])
             
             if await is_paper_exists(paper_id, vectorstore):
                 return {"paper_id": paper_id, "status": "success", "reason": "added", "count": len(paper_docs)}
@@ -48,7 +52,7 @@ async def process_batch(batch_papers, vectorstore, semaphore, args, batch_num):
     """Process a batch of papers"""
     batch_size = len(batch_papers)
     # Generate exponential distribution delay times for the current batch
-    delay_times = np.random.exponential(scale=10.0, size=batch_size)
+    delay_times = np.random.exponential(scale=30.0, size=batch_size)
     
     print(f"[INFO] Starting to process batch {batch_num}, containing {batch_size} papers")
     
@@ -79,7 +83,7 @@ async def main(args):
     vectorstore = Chroma(
         embedding_function=embeddings,
         persist_directory=args.chroma_dir,
-        collection_name='ais_basket',
+        collection_name=args.collection_name,
     )
 
     # Get all paper ids
@@ -140,12 +144,15 @@ async def dev(args):
         collection_name='test',
     )
 
-    paper_id = "1"  # Use string format to keep consistent
+    paper_id = "10"  # Use string format to keep consistent
 
     if await is_paper_exists(paper_id, vectorstore):
         print(f"[INFO] Paper {paper_id} already exists")
     else:
-        paper_docs = get_paper_docs(paper_id, args)
+        if args.recursive:
+            paper_docs = get_paper_docs_recursive(paper_id, args)
+        else:
+            paper_docs = get_paper_docs(paper_id, args)
         print(f"[INFO] Adding paper {paper_id}")
         vectorstore.add_documents(paper_docs)
         if await is_paper_exists(paper_id, vectorstore):
@@ -158,8 +165,10 @@ if __name__ == '__main__':
     args = argparse.ArgumentParser()
     args.add_argument('--papers_mineru_dir', type=str, default='./export/papers_mineru', help='The path to the papers mineru directory')
     args.add_argument('--chroma_dir', type=str, default='./export/chroma', help='The path to the chroma directory')
+    args.add_argument('--collection_name', type=str, default='ais_basket', help='The name of the collection')
     args.add_argument('--db_path', type=str, default='./export/db/academy.db', help='The path to the database file')
     args.add_argument('--dev', action='store_true', help='Use dev mode')
+    args.add_argument('--recursive', action='store_true', help='Use recursive mode')
     args.add_argument('--batch_size', type=int, default=100, help='Number of papers to process in each batch')
     args.add_argument('--batch_interval', type=float, default=10.0, help='Interval (in seconds) between batches')
     args = args.parse_args()
