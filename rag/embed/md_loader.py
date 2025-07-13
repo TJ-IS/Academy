@@ -72,34 +72,24 @@ def get_paper_docs(paper_id, args):
 
 
 def main(args):
-    headers_to_split_on = [
-        ('#', 'section'),
-    ]
+    pass
 
-    splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-
-    for paper_dir in tqdm(os.listdir(args.papers_mineru_dir)):
-        for file in os.listdir(os.path.join(args.papers_mineru_dir, paper_dir, 'txt')):
-            if file.endswith('.md'):
-                file_path = os.path.join(args.papers_mineru_dir, paper_dir, 'txt', file)
-                with open(file_path, 'r') as f:
-                    md_content = f.read()
-                    md_header_splits = splitter.split_text(md_content)
-                    docs = transform_md_to_docs(md_header_splits, paper_dir, args)
-                    
-                    pickle.dump(docs, open(os.path.join(args.output_dir, f'{paper_dir}.pkl'), 'wb'))
-                    # with open(os.path.join(args.output_dir, f'{paper_dir}.txt'), 'w') as f:
-                    #     for doc in docs:
-                    #         f.write(json.dumps(doc.model_dump(), indent=4))
-                    #         f.write('\n')
-
-        # break
 
 def dev(args):
-    paper_docs = get_paper_docs(1, args)
-    print(paper_docs)
 
+    papers_id = [i for i in os.listdir(args.papers_mineru_dir) if os.path.isdir(os.path.join(args.papers_mineru_dir, i))]
+    
+    sections = []
+    for paper_id in tqdm(papers_id):
+        paper_docs = get_paper_docs(paper_id, args)
+        
+        for doc in paper_docs:
+            sections.append((doc.metadata['paper_id'], doc.metadata['section']))
 
+    print(sections)
+    with open(os.path.join('temp', 'sections.txt'), 'w') as f:
+        for section in sections:
+            f.write(f'{section[0]}: {section[1]}\n')
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
