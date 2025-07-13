@@ -9,6 +9,11 @@ from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 
+def get_docs_by_query(query, vectorstore, k=100):
+    docs = vectorstore.similarity_search(query, k=k)
+    return docs
+
+
 def main(args):
     pass
     
@@ -22,9 +27,15 @@ def dev(args):
         collection_name='academy',
     )
 
-    query = 'What is the loss aversion?'
-    docs = vectorstore.similarity_search(query, k=3)
-    print(docs)
+    query = 'what is loss aversion?'
+    docs = get_docs_by_query(query, vectorstore)
+
+    for doc in docs:
+        print(doc.metadata)
+        print(doc.page_content)
+        print('-' * 100)
+        print()
+
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
